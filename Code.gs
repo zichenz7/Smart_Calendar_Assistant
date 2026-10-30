@@ -8,11 +8,13 @@ function createHomePage() {
   card.setHeader(
     CardService.newCardHeader()
       .setTitle("🧠 Smart Calendar Assistant")
-      .setSubtitle("AI-powered focus and scheduling")
+      .setSubtitle("Rule-based focus and break suggestions")
   );
 
   const tasks = getTasksFromCalendar();
-  const todayTasks = tasks.filter(t => isToday(t.start));
+  const now = new Date();
+  const timeZone = CalendarApp.getDefaultCalendar().getTimeZone();
+  const todayTasks = tasks.filter(t => isToday(t.start, now, timeZone));
   todayTasks.sort((a, b) => b.priorityScore - a.priorityScore);
   const focusTasks = todayTasks.slice(0, 3);
 
@@ -25,7 +27,7 @@ function createHomePage() {
     focusTasks.forEach(t => {
       focusSection.addWidget(
         CardService.newTextParagraph().setText(
-          `⭐ <b>${t.title}</b><br>🏷️ ${t.tag} | 🚨 ${t.priority}<br>🔥 Score: ${t.priorityScore}`
+          `⭐ <b>${escapeHtml_(t.title)}</b><br>🏷️ ${escapeHtml_(t.tag)} | 🚨 ${escapeHtml_(t.priority)}<br>🔥 Score: ${t.priorityScore}`
         )
       );
     });
@@ -153,63 +155,22 @@ function showAddTaskForm() {
 }
 
 function submitAddTask(e) {
-  const formInputs = e.commonEventObject.formInputs;
-
-  function safeGet(obj, key, def = null) {
-    try {
-      if (!obj || !obj[key]) return def;
-
-      const item = obj[key];
-
-      if (item.stringInputs?.value) return item.stringInputs.value[0];
-
-      if (item.dateTimeInput) {
-        const dt = item.dateTimeInput;
-        return (
-          dt.msSinceEpoch?.[0] ||
-          dt.valueMsSinceEpoch?.[0] ||
-          dt.msSinceEpoch ||
-          dt.valueMsSinceEpoch ||
-          def
-        );
-      }
-
-      return def;
-    } catch (err) {
-      return def;
-    }
+  let event;
+  const timeZone = CalendarApp.getDefaultCalendar().getTimeZone();
+  try {
+    event = buildTaskEvent_(e, timeZone);
+  } catch (error) {
+    return CardService.newActionResponseBuilder()
+      .setNotification(CardService.newNotification().setText(error.message))
+      .build();
   }
-
-  const title = safeGet(formInputs, "title", "Untitled Task");
-  const startEpoch = safeGet(formInputs, "startTime");
-  const duration = parseFloat(safeGet(formInputs, "duration", "1")) || 1;
-  const tag = safeGet(formInputs, "tag", "General");
-  const priority = safeGet(formInputs, "priority", "Medium");
-  const flexibility = safeGet(formInputs, "flexibility", "No");
-  const colorId = safeGet(formInputs, "colorId", "1");
-
-  if (!startEpoch) throw new Error("Start time missing or invalid");
-
-  const rawDate = new Date(parseInt(startEpoch));
-  const startTime =
-    new Date(rawDate.getTime() + rawDate.getTimezoneOffset() * 60000);
-  const endTime = new Date(startTime.getTime() + duration * 3600000);
-
-  const timeZone = Session.getScriptTimeZone();
-
-  const event = {
-    summary: title,
-    description: `Tag: ${tag}\nPriority: ${priority}\nFlexibility: ${flexibility}`,
-    start: {
-      dateTime: formatLocalDateTime(startTime),
-      timeZone: timeZone,
-    },
-    end: {
-      dateTime: formatLocalDateTime(endTime),
-      timeZone: timeZone,
-    },
-    colorId: colorId,
-  };
+  const title = event.summary;
+  const info = parseEventDescription(event.description);
+  const priority = info.priority;
+  const tag = info.tag;
+  const colorId = event.colorId;
+  const startTime = new Date(event.start.dateTime);
+  const endTime = new Date(event.end.dateTime);
 
   Calendar.Events.insert(event, "primary");
 
@@ -218,7 +179,7 @@ function submitAddTask(e) {
     .addSection(
       CardService.newCardSection().addWidget(
         CardService.newTextParagraph().setText(
-          `<b>${title}</b> (${priority})<br>🏷️ ${tag}<br>🎨 Color: ${colorId}<br>⏰ ${startTime.toLocaleString()} → ${endTime.toLocaleString()}`
+          `<b>${escapeHtml_(title)}</b> (${escapeHtml_(priority)})<br>🏷️ ${escapeHtml_(tag)}<br>🎨 Color: ${escapeHtml_(colorId)}<br>⏰ ${formatCalendarDateTime_(startTime, timeZone)} → ${formatCalendarDateTime_(endTime, timeZone)} (${escapeHtml_(timeZone)})`
         )
       )
     )
@@ -240,13 +201,12 @@ function submitAddTask(e) {
     .build();
 }
 
-function isToday(date) {
-  const now = new Date();
-  return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  );
+// Calendar-local dates must not depend on the script or runtime time zone.
+function isToday(date, now, timeZone) {
+  now = now || new Date();
+  timeZone = timeZone || CalendarApp.getDefaultCalendar().getTimeZone();
+  return Utilities.formatDate(date, timeZone, "yyyy-MM-dd") ===
+    Utilities.formatDate(now, timeZone, "yyyy-MM-dd");
 }
 
 function getTasksFromCalendar() {
@@ -282,17 +242,27 @@ function getTasksFromCalendar() {
 }
 
 function parseEventDescription(desc) {
-  if (!desc) return {};
-  const patterns = {
-    tag: /Tag:\s*([A-Za-z0-9,\s]+)/i,
-    priority: /Priority:\s*(High|Medium|Low)/i,
-    flexibility: /Flexibility:\s*(Yes|No)/i,
-  };
+  if (typeof desc !== "string" || !desc) return {};
+  // Calendar descriptions may contain line breaks serialized as HTML.
+  const lines = desc.replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/(?:div|p)\s*>/gi, "\n")
+    .replace(/<[^>]*>/g, "").split(/\r\n|\r|\n/);
   const result = {};
-  for (const key in patterns) {
-    const match = desc.match(patterns[key]);
-    if (match) result[key] = match[1].trim();
-  }
+  lines.forEach(line => {
+    const match = line.match(/^[ \t]*(Tag|Priority|Flexibility)[ \t]*:[ \t]*(.*?)[ \t]*$/i);
+    if (!match) return;
+    const key = match[1].toLowerCase();
+    const value = match[2].trim();
+    // Keep the first valid occurrence; never consume the next metadata line.
+    if (!value || Object.prototype.hasOwnProperty.call(result, key)) return;
+    if (key === "tag") result.tag = value;
+    if (key === "priority" && /^(high|medium|low)$/i.test(value)) {
+      result.priority = value[0].toUpperCase() + value.slice(1).toLowerCase();
+    }
+    if (key === "flexibility" && /^(yes|no)$/i.test(value)) {
+      result.flexibility = value[0].toUpperCase() + value.slice(1).toLowerCase();
+    }
+  });
   return result;
 }
 
@@ -306,17 +276,65 @@ function calculatePriority(t) {
   return Math.round(t.tagWeight * 20 * deadlineFactor * priorityFactor * flexFactor);
 }
 
-function formatLocalDateTime(d) {
-  return (
-    d.getFullYear() + "-" +
-    String(d.getMonth() + 1).padStart(2, "0") + "-" +
-    String(d.getDate()).padStart(2, "0") + "T" +
-    String(d.getHours()).padStart(2, "0") + ":" +
-    String(d.getMinutes()).padStart(2, "0") + ":" +
-    String(d.getSeconds()).padStart(2, "0")
-  );
+function formatCalendarDateTime_(date, timeZone) {
+  return Utilities.formatDate(date, timeZone, "yyyy-MM-dd HH:mm z");
 }
 
+function escapeHtml_(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
 
+function singleValue_(value) {
+  if (Array.isArray(value)) return value.length === 1 ? value[0] : null;
+  return value;
+}
 
+function readTextInput_(inputs, name, fallback) {
+  const value = singleValue_(inputs[name]?.stringInputs?.value);
+  return typeof value === "string" ? value : fallback;
+}
 
+// Build and validate before calling Calendar: invalid forms never create events.
+function buildTaskEvent_(e, timeZone) {
+  const inputs = e?.commonEventObject?.formInputs || {};
+  const dateInput = inputs.startTime?.dateTimeInput;
+  const rawEpoch = singleValue_(dateInput?.msSinceEpoch);
+  if (!dateInput || dateInput.hasDate === false || dateInput.hasTime === false ||
+      !["string", "number"].includes(typeof rawEpoch) ||
+      !/^-?\d+$/.test(String(rawEpoch).trim())) {
+    throw new Error("Select a valid start date and time.");
+  }
+  const epoch = Number(rawEpoch);
+  const start = new Date(epoch);
+  if (!Number.isSafeInteger(epoch) || !Number.isFinite(start.getTime())) {
+    throw new Error("Select a valid start date and time.");
+  }
+  const duration = Number(readTextInput_(inputs, "duration", "1"));
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error("Duration must be a positive number of hours.");
+  }
+  // Duration is elapsed time, including across daylight-saving transitions.
+  const end = new Date(epoch + duration * 3600000);
+  if (!Number.isFinite(end.getTime()) || end <= start) {
+    throw new Error("Duration produces an invalid end time.");
+  }
+  const oneLine = value => value.replace(/[\r\n]+/g, " ").trim();
+  const title = readTextInput_(inputs, "title", "Untitled Task").trim() || "Untitled Task";
+  const tag = oneLine(readTextInput_(inputs, "tag", "General")) || "General";
+  const priority = readTextInput_(inputs, "priority", "Medium");
+  const flexibility = readTextInput_(inputs, "flexibility", "No");
+  const colorId = readTextInput_(inputs, "colorId", "1");
+  if (!["High", "Medium", "Low"].includes(priority) ||
+      !["Yes", "No"].includes(flexibility) || !/^(?:[1-9]|10)$/.test(colorId)) {
+    throw new Error("Select valid priority, flexibility, and color values.");
+  }
+  return {
+    summary: title,
+    description: `Tag: ${tag}\nPriority: ${priority}\nFlexibility: ${flexibility}`,
+    // The picker already supplies an absolute epoch. Do not add an offset.
+    start: { dateTime: start.toISOString(), timeZone },
+    end: { dateTime: end.toISOString(), timeZone },
+    colorId,
+  };
+}

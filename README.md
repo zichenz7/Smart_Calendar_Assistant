@@ -22,7 +22,7 @@ An **ACM@UIUC SIGCHI team project**, developed by a seven-member team led by **Z
 1. Open the add-on sidebar and review **Today's Focus**.
 2. Choose **Add Task**, enter the event details, and select its organizational attributes.
 3. Submit the form to create a colored event on the primary calendar.
-4. Open **Smart Break Suggestions** to see free intervals from now until 23:00 and activity ideas appropriate to their length.
+4. Open **Smart Break Suggestions** to see free intervals from now until 23:00 in the primary calendar's time zone, with activity ideas appropriate to their length.
 
 ```mermaid
 flowchart LR
@@ -51,7 +51,8 @@ The technical implementation below describes the **team's project**. My leadersh
 - **Calendar as storage:** tasks are Calendar events; organizational metadata is stored in their descriptions, so this prototype needs no separate database.
 - **Deterministic focus ranking:** explicit weights make priority behavior inspectable.
 - **Free-time scan:** a moving cursor advances to the latest event end, so nested and overlapping events do not create false gaps in the active detector.
-- **User-triggered writes:** task creation happens on form submission; the active break flow is informational.
+- **Time-zone handling:** preserve the picker's absolute timestamp, send UTC timestamps to Calendar, and use the primary calendar's time zone for daily boundaries and displayed results.
+- **User-triggered writes:** validated task creation happens on form submission; the break flow is informational.
 
 [Read the architecture, algorithms, and prototype boundaries →](ENGINEERING.md)
 
@@ -62,15 +63,21 @@ The repository contains the Apps Script source and manifest, rather than a publi
 1. Create an Apps Script project and add [Code.gs](Code.gs), [smartbreaker.gs](smartbreaker.gs), and [appsscript.json](appsscript.json).
 2. Enable the [Advanced Calendar service](https://developers.google.com/apps-script/advanced/calendar), matching the manifest's Calendar v3 dependency.
 3. Use Google's [unpublished add-on testing instructions](https://developers.google.com/workspace/add-ons/how-tos/testing-workspace-addons) to create a test installation and authorize it.
-4. Open Google Calendar and test the add-on with sample events. The archived manifest uses `America/Chicago`; verify date/time behavior in your environment before relying on it.
+4. Open Google Calendar and test the add-on with sample events. The date-time picker uses the user's time zone by default; confirmation, Today's Focus, and break boundaries use the primary calendar's time zone. The manifest still uses `America/Chicago`, but the implementation does not assume that it matches the calendar.
+
+### Local verification
+
+With Node.js 18+ installed, run `npm test` (no package installation is needed). The suite loads both `.gs` files with mocked Calendar, CardService, and Utilities interfaces; it does not create real events or require a Google account. See [verification and manual checks](ENGINEERING.md#verification-and-current-boundaries).
 
 ## Project status
 
-This is a student prototype. The source includes older break-flow code alongside the active entry point and has known metadata/date-handling limitations. The current repository does not establish a Marketplace release, production adoption, or a measured productivity improvement. [Verification and limitations →](ENGINEERING.md#verification-and-current-boundaries)
+This is a student prototype. The October 30, 2026 maintenance update fixes timestamp handling and metadata parsing, consolidates the break flow into one entry point, and adds 17 passing local regression tests. Live Apps Script authorization and event-write behavior still require a manual test installation. The current repository does not establish a Marketplace release, production adoption, or a measured productivity improvement. [Verification and limitations →](ENGINEERING.md#verification-and-current-boundaries)
 
 | File | Role |
 | --- | --- |
 | [Code.gs](Code.gs) | Homepage, task form, event creation, metadata parsing, and priority scoring |
-| [smartbreaker.gs](smartbreaker.gs) | Free-time detection and break suggestions, including a retained older implementation |
+| [smartbreaker.gs](smartbreaker.gs) | One informational break card, calendar-local boundaries, and interval merging |
 | [appsscript.json](appsscript.json) | Runtime, Calendar service, OAuth scopes, time zone, and homepage trigger |
-| [ENGINEERING.md](ENGINEERING.md) | Architecture and source-verified behavior |
+| [tests/calendar.test.cjs](tests/calendar.test.cjs) | Offline regression tests with mocked Google services |
+| [package.json](package.json) | Dependency-free local test command |
+| [ENGINEERING.md](ENGINEERING.md) | Architecture, fixes, verification, and remaining boundaries |
