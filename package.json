@@ -1,6 +1,11 @@
 {
   "name": "smart-calendar-assistant",
   "private": true,
-  "scripts": { "test": "node --test tests/*.test.cjs" },
-  "engines": { "node": ">=18" }
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "demo": "node demo/server.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
 }

@@ -2,7 +2,7 @@
 
 [Project overview](README.md) · [Core UI and task logic](Code.gs) · [Break logic](smartbreaker.gs)
 
-Smart Calendar Assistant runs inside Google Calendar as a Google Workspace add-on. Google Apps Script hosts the JavaScript, CardService supplies the sidebar UI, and Calendar services read and create events. There is no separate application server or database in this repository.
+Smart Calendar Assistant runs inside Google Calendar as a Google Workspace add-on. Google Apps Script hosts the JavaScript, CardService supplies the sidebar UI, and Calendar services read and create events. The add-on needs no separate application server or database. The optional local visual demo uses a Node.js server solely to render source-generated cards against synthetic data.
 
 ## Architecture
 
@@ -105,6 +105,12 @@ Node.js 18+ is sufficient; no third-party test packages or Google credentials ar
 | Consolidation | A single break entry point builds an informational card without Calendar writes |
 
 These tests validate local application logic and the service calls it constructs. They do not execute Google's real Utilities/CardService implementations or prove a live authorization/deployment works. No real Calendar events were created by this verification.
+
+### Source-driven visual demo
+
+`npm run demo` starts the [local demonstration](demo/README.md) on `127.0.0.1:4179`. The Node server executes `Code.gs` and `smartbreaker.gs` with mock Calendar, CardService, and Utilities interfaces. An HTML adapter renders the card structures; it is not Google's native CardService runtime.
+
+On October 30, 2026, the browser walkthrough verified homepage ranking, a populated task form, local task insertion with a one-hour interval, the confirmation card, the updated focus list, and five remaining free intervals. The clock is fixed at 10:00 in America/Chicago on October 30, 2026. Real Calendar authorization, writes, and native rendering remain outside this demo's scope.
 
 ### Manual installation checks
 
