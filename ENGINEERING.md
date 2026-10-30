@@ -61,6 +61,12 @@ flexibilityFactor: No 1.2 | Yes 0.8
 
 Event end time acts as the deadline proxy. Although the function accepts a tag weight, the current caller passes the same value for every event, so tags do not currently personalize ranking. The flexibility flag affects the score; it does not reschedule an event. There is no learned ranking model or automatic calendar optimizer.
 
+## AI integration audit
+
+The current source and the pre-maintenance version (`c2440a6`) were inspected on October 30, 2026. Neither contains AI model inference or an external AI API call. `calculatePriority()` uses fixed weights; the active break flow selects predefined text at 40- and 70-minute thresholds after finding gaps of at least 25 minutes. The older, duplicate `suggestBreaks_()` implementation also used fixed duration thresholds and predefined labels.
+
+The manifest declares only the Calendar advanced service, and there are no library dependencies or external-request calls in these source files. The earlier **AI-powered focus and scheduling** subtitle was UI copy, not an implemented AI integration. **Rule-based focus and break suggestions** accurately describes the inspected implementation. This finding applies to the available project and repository versions, not any separate unpublished experiment.
+
 ## Break-suggestion algorithm
 
 The single `showSmartBreaksCard(e)` calls `detectFreeTimeToday()`:
@@ -111,6 +117,14 @@ These tests validate local application logic and the service calls it constructs
 `npm run demo` starts the [local demonstration](demo/README.md) on `127.0.0.1:4179`. The Node server executes `Code.gs` and `smartbreaker.gs` with mock Calendar, CardService, and Utilities interfaces. An HTML adapter renders the card structures; it is not Google's native CardService runtime.
 
 On October 30, 2026, the browser walkthrough verified homepage ranking, a populated task form, local task insertion with a one-hour interval, the confirmation card, the updated focus list, and five remaining free intervals. The clock is fixed at 10:00 in America/Chicago on October 30, 2026. Real Calendar authorization, writes, and native rendering remain outside this demo's scope.
+
+### Native Google Calendar check
+
+On October 30, 2026, the maintained `Code.gs` and `smartbreaker.gs` were saved to the existing Apps Script project. Reloading its installed Google Calendar add-on showed the updated **Rule-based focus and break suggestions** header. The native task form accepted a fictional title, time, and duration without submission. The live break action rendered one interval from **15:02 CDT to 23:00 CDT**, explicitly labeled **America/Chicago**, on the empty day shown.
+
+[Native screenshots and scope →](demo/NATIVE-WALKTHROUGH.md)
+
+This verifies native rendering and successful execution of the homepage and read-only break flow in the existing installation. It does not verify a fresh authorization flow, live event insertion, or picker-to-saved-event time-zone conversion. No Calendar event was created or deleted during this check. The manifest and sharing settings were not changed.
 
 ### Manual installation checks
 

@@ -1,6 +1,6 @@
 # Source-driven visual walkthrough
 
-[Project overview](../README.md) · [Technical details](../ENGINEERING.md)
+[Project overview](../README.md) · [Native Google Calendar screenshots](NATIVE-WALKTHROUGH.md) · [Technical details](../ENGINEERING.md)
 
 This is a **local interactive demonstration**, captured on October 30, 2026. It executes the repository's `Code.gs` and `smartbreaker.gs` and renders their card structures through a small custom HTML adapter. It is **not an installed Google Calendar add-on** and does not reproduce Google's native CardService styling exactly. The surrounding schedule panel is demo-only.
 
